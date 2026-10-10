@@ -1,6 +1,7 @@
 
 "use client";
 
+import ProtectedPage from "@/components/ProtectedPage";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -34,12 +35,7 @@ export default function DiagnosePage() {
 
   function handleChange(event) {
     const { name, value } = event.target;
-
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
-
+    setForm((previous) => ({ ...previous, [name]: value }));
     setError("");
   }
 
@@ -77,21 +73,13 @@ export default function DiagnosePage() {
       body: formData,
     });
 
-    const contentType = response.headers.get("content-type") || "";
-
-    if (!contentType.includes("application/json")) {
-      throw new Error(
-        `Image upload returned a non-JSON response (HTTP ${response.status}).`
-      );
-    }
-
-    const result = await response.json();
+    const result = await response.json().catch(() => null);
 
     if (!response.ok) {
-      throw new Error(result.error || "Image upload failed.");
+      throw new Error(result?.error || "Image upload failed.");
     }
 
-    if (!result.secureUrl) {
+    if (!result?.secureUrl) {
       throw new Error("Cloudinary did not return an image URL.");
     }
 
@@ -101,27 +89,17 @@ export default function DiagnosePage() {
   async function diagnoseCrop(imageUrl) {
     const response = await fetch("/api/diagnose-crop", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ imageUrl }),
     });
 
-    const contentType = response.headers.get("content-type") || "";
-
-    if (!contentType.includes("application/json")) {
-      throw new Error(
-        `Crop diagnosis returned a non-JSON response (HTTP ${response.status}).`
-      );
-    }
-
-    const result = await response.json();
+    const result = await response.json().catch(() => null);
 
     if (!response.ok) {
-      throw new Error(result.error || "Crop diagnosis failed.");
+      throw new Error(result?.error || "Crop diagnosis failed.");
     }
 
-    if (!result.success) {
+    if (!result?.success) {
       throw new Error("Crop.health did not return a successful diagnosis.");
     }
 
@@ -147,20 +125,12 @@ export default function DiagnosePage() {
     const cropAge = Number(form.cropAge);
     const budget = Number(form.budget);
 
-    if (
-      form.cropAge.trim() === "" ||
-      !Number.isFinite(cropAge) ||
-      cropAge <= 0
-    ) {
+    if (!form.cropAge.trim() || !Number.isFinite(cropAge) || cropAge <= 0) {
       setError("Enter a crop age greater than zero.");
       return;
     }
 
-    if (
-      form.budget.trim() === "" ||
-      !Number.isFinite(budget) ||
-      budget < 0
-    ) {
+    if (!form.budget.trim() || !Number.isFinite(budget) || budget < 0) {
       setError("Enter a valid non-negative budget.");
       return;
     }
@@ -173,37 +143,41 @@ export default function DiagnosePage() {
     setLoading(true);
 
     try {
+      // Step 1: Upload the image to Cloudinary.
+      const imageUrl = await uploadCropImage(image);
 
-    const imageUrl = await uploadCropImage(image);
-    console.log("Cloudinary image URL:", imageUrl);
+      // Step 2: Obtain real crop and disease predictions.
+      const diagnosis = await diagnoseCrop(imageUrl);
 
-    const diagnosis = await diagnoseCrop(imageUrl);
+      // Step 3: Save the diagnosis permanently for this farmer.
+      const saveResponse = await fetch("/api/diagnoses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cropName: form.cropName.trim(),
+          cropAge,
+          ageUnit: form.ageUnit,
+          location: form.location.trim(),
+          budget,
+          soilType: form.soilType,
+          image: imageUrl,
+          diagnosis,
+        }),
+      });
 
-    // Print the complete response.
-    console.log("Crop.health full diagnosis:", diagnosis);
+      const savedResult = await saveResponse.json().catch(() => null);
 
-    // Print the detected crop.
-    console.log("Detected crop:", diagnosis.crop?.name ?? "Unknown");
-
-    // Print all disease predictions.
-    if (diagnosis.diseases?.length > 0) {
-    console.log("Disease predictions:");
-
-    diagnosis.diseases.forEach((disease, index) => {
-        console.log(`${index + 1}. ${disease.name}`);
-        console.log(
-        "Confidence:",
-        `${(disease.probability * 100).toFixed(2)}%`
+      if (!saveResponse.ok) {
+        throw new Error(
+          savedResult?.error ||
+            "Diagnosis completed, but saving it to history failed."
         );
-    });
-    } else {
-    console.log("No disease predictions returned.");
-    }
+      }
 
-
-      // Step 3: Save form data and diagnosis for the report page.
+      // Step 4: Keep the existing report page working.
       const report = {
         id: "draft",
+        diagnosisId: savedResult.diagnosisId,
         cropName: form.cropName.trim(),
         cropAge,
         ageUnit: form.ageUnit,
@@ -216,20 +190,15 @@ export default function DiagnosePage() {
         createdAt: new Date().toISOString(),
       };
 
-        sessionStorage.setItem(
+      sessionStorage.setItem(
         "farmwise-current-report",
         JSON.stringify(report)
-        );
+      );
 
-        window.dispatchEvent(new Event("farmwise-report-updated"));
-
-        // Step 4: Navigate to the existing report page.
-        router.push("/report/draft");
-
-        
+      window.dispatchEvent(new Event("farmwise-report-updated"));
+      router.push("/report/draft");
     } catch (err) {
       console.error("Diagnosis submission failed:", err);
-
       setError(
         err instanceof Error
           ? err.message
@@ -239,7 +208,6 @@ export default function DiagnosePage() {
       setLoading(false);
     }
   }
-
 
   function handleReset() {
     setForm(INITIAL_FORM);
@@ -252,146 +220,148 @@ export default function DiagnosePage() {
   }
 
   return (
-    <main className="min-h-screen p-6">
-      <h1 className="mb-6 text-2xl font-bold">Crop Diagnosis</h1>
+    <ProtectedPage>
+      <main className="min-h-screen p-6">
+        <h1 className="mb-6 text-2xl font-bold">Crop Diagnosis</h1>
 
-      <form onSubmit={handleSubmit} className="max-w-xl space-y-4">
-        <div>
-          <label htmlFor="crop-image">Crop photograph *</label>
-          <input
-            id="crop-image"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={handleImageChange}
-            className="block w-full border p-2"
-            required
-          />
-        </div>
-
-        {preview && (
-          <img
-            src={preview}
-            alt="Selected crop"
-            className="max-h-64 max-w-full object-contain"
-          />
-        )}
-
-        <div>
-          <label htmlFor="cropName">Crop name *</label>
-          <input
-            id="cropName"
-            name="cropName"
-            value={form.cropName}
-            onChange={handleChange}
-            required
-            maxLength={100}
-            placeholder="e.g. Tomato"
-            className="block w-full border p-2"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="cropAge">Crop age *</label>
-          <div className="flex gap-2">
+        <form onSubmit={handleSubmit} className="max-w-xl space-y-4">
+          <div>
+            <label htmlFor="crop-image">Crop photograph *</label>
             <input
-              id="cropAge"
-              name="cropAge"
-              type="number"
-              min="0.01"
-              step="any"
-              value={form.cropAge}
+              id="crop-image"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleImageChange}
+              className="block w-full border p-2"
+              required
+            />
+          </div>
+
+          {preview && (
+            <img
+              src={preview}
+              alt="Selected crop"
+              className="max-h-64 max-w-full object-contain"
+            />
+          )}
+
+          <div>
+            <label htmlFor="cropName">Crop name *</label>
+            <input
+              id="cropName"
+              name="cropName"
+              value={form.cropName}
               onChange={handleChange}
               required
-              placeholder="e.g. 45"
-              className="w-full border p-2"
+              maxLength={100}
+              placeholder="e.g. Tomato"
+              className="block w-full border p-2"
             />
+          </div>
 
-            <select
-              name="ageUnit"
-              value={form.ageUnit}
+          <div>
+            <label htmlFor="cropAge">Crop age *</label>
+            <div className="flex gap-2">
+              <input
+                id="cropAge"
+                name="cropAge"
+                type="number"
+                min="0.01"
+                step="any"
+                value={form.cropAge}
+                onChange={handleChange}
+                required
+                placeholder="e.g. 45"
+                className="w-full border p-2"
+              />
+
+              <select
+                name="ageUnit"
+                value={form.ageUnit}
+                onChange={handleChange}
+                aria-label="Crop age unit"
+                className="border p-2"
+              >
+                <option value="days">Days</option>
+                <option value="months">Months</option>
+                <option value="years">Years</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="location">Farm location *</label>
+            <input
+              id="location"
+              name="location"
+              value={form.location}
               onChange={handleChange}
-              aria-label="Crop age unit"
-              className="border p-2"
+              required
+              maxLength={200}
+              placeholder="Village, town or district"
+              className="block w-full border p-2"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="budget">Treatment budget (₹) *</label>
+            <input
+              id="budget"
+              name="budget"
+              type="number"
+              min="0"
+              step="1"
+              value={form.budget}
+              onChange={handleChange}
+              required
+              placeholder="e.g. 1000"
+              className="block w-full border p-2"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="soilType">Soil type *</label>
+            <select
+              id="soilType"
+              name="soilType"
+              value={form.soilType}
+              onChange={handleChange}
+              required
+              className="block w-full border p-2"
             >
-              <option value="days">Days</option>
-              <option value="months">Months</option>
-              <option value="years">Years</option>
+              <option value="">Select soil type</option>
+              {SOIL_TYPES.map((soil) => (
+                <option key={soil} value={soil}>
+                  {soil}
+                </option>
+              ))}
             </select>
           </div>
-        </div>
 
-        <div>
-          <label htmlFor="location">Farm location *</label>
-          <input
-            id="location"
-            name="location"
-            value={form.location}
-            onChange={handleChange}
-            required
-            maxLength={200}
-            placeholder="Village, town or district"
-            className="block w-full border p-2"
-          />
-        </div>
+          {error && (
+            <p role="alert" className="text-red-600">
+              {error}
+            </p>
+          )}
 
-        <div>
-          <label htmlFor="budget">Treatment budget (₹) *</label>
-          <input
-            id="budget"
-            name="budget"
-            type="number"
-            min="0"
-            step="1"
-            value={form.budget}
-            onChange={handleChange}
-            required
-            placeholder="e.g. 1000"
-            className="block w-full border p-2"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="soilType">Soil type *</label>
-          <select
-            id="soilType"
-            name="soilType"
-            value={form.soilType}
-            onChange={handleChange}
-            required
-            className="block w-full border p-2"
+          <button
+            type="submit"
+            disabled={loading}
+            className="border px-4 py-2 disabled:opacity-50"
           >
-            <option value="">Select soil type</option>
-            {SOIL_TYPES.map((soil) => (
-              <option key={soil} value={soil}>
-                {soil}
-              </option>
-            ))}
-          </select>
-        </div>
+            {loading ? "Uploading, diagnosing and saving..." : "Diagnose crop"}
+          </button>
 
-        {error && (
-          <p role="alert" className="text-red-600">
-            {error}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="border px-4 py-2 disabled:opacity-50"
-        >
-          {loading ? "Uploading and diagnosing..." : "Diagnose crop"}
-        </button>
-
-        <button
-          type="button"
-          onClick={handleReset}
-          disabled={loading}
-          className="ml-2 border px-4 py-2 disabled:opacity-50"
-        >
-          Reset form
-        </button>
-      </form>
-    </main>
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={loading}
+            className="ml-2 border px-4 py-2 disabled:opacity-50"
+          >
+            Reset form
+          </button>
+        </form>
+      </main>
+    </ProtectedPage>
   );
 }

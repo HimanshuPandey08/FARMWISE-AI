@@ -1,7 +1,8 @@
 
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { Suspense, useSyncExternalStore } from "react";
+import ProtectedPage from "@/components/ProtectedPage";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -19,8 +20,7 @@ function subscribeToReport(callback) {
 
 function getReportSnapshot() {
   try {
-    const saved = sessionStorage.getItem(STORAGE_KEY);
-    return saved ?? null;
+    return sessionStorage.getItem(STORAGE_KEY);
   } catch {
     return null;
   }
@@ -30,8 +30,9 @@ function getServerSnapshot() {
   return null;
 }
 
-export default function ReportPage() {
+function ReportContent() {
   const params = useParams();
+
   const reportId = Array.isArray(params?.id)
     ? params.id[0]
     : params?.id;
@@ -43,7 +44,11 @@ export default function ReportPage() {
   );
 
   if (saved === null) {
-    return <main className="min-h-screen p-6">Loading report...</main>;
+    return (
+      <main className="min-h-screen p-6">
+        Loading report...
+      </main>
+    );
   }
 
   let report;
@@ -80,7 +85,9 @@ export default function ReportPage() {
 
   return (
     <main className="min-h-screen p-6">
-      <h1 className="mb-6 text-2xl font-bold">Diagnosis Report</h1>
+      <h1 className="mb-6 text-2xl font-bold">
+        Diagnosis Report
+      </h1>
 
       {(report.image || report.imageData) && (
         <img
@@ -90,60 +97,90 @@ export default function ReportPage() {
         />
       )}
 
-      <h2 className="text-xl font-semibold">Submitted Crop Details</h2>
+      <h2 className="text-xl font-semibold">
+        Submitted Crop Details
+      </h2>
 
       <dl className="my-4 space-y-3">
         <div>
           <dt className="font-semibold">Entered crop name</dt>
           <dd>{report.cropName}</dd>
         </div>
+
         <div>
           <dt className="font-semibold">Crop age</dt>
-          <dd>{report.cropAge} {report.ageUnit}</dd>
+          <dd>
+            {report.cropAge} {report.ageUnit}
+          </dd>
         </div>
+
         <div>
           <dt className="font-semibold">Location</dt>
           <dd>{report.location}</dd>
         </div>
+
         <div>
           <dt className="font-semibold">Soil type</dt>
           <dd>{report.soilType}</dd>
         </div>
+
         <div>
           <dt className="font-semibold">Treatment budget</dt>
-          <dd>₹{Number(report.budget).toLocaleString("en-IN")}</dd>
+          <dd>
+            ₹{Number(report.budget).toLocaleString("en-IN")}
+          </dd>
         </div>
       </dl>
 
       <section className="my-6 space-y-4 border p-4">
-        <h2 className="text-xl font-semibold">Disease Diagnosis</h2>
+        <h2 className="text-xl font-semibold">
+          Disease Diagnosis
+        </h2>
 
         {!diagnosis ? (
-          <p>No diagnosis results are saved. Please submit the form again.</p>
+          <p>
+            No diagnosis results are saved. Please submit the form again.
+          </p>
         ) : (
           <>
             <div>
-              <h3 className="font-semibold">AI-identified crop</h3>
-              <p>{detectedCrop?.name ?? "No crop identified"}</p>
+              <h3 className="font-semibold">
+                AI-identified crop
+              </h3>
+
+              <p>
+                {detectedCrop?.name ?? "No crop identified"}
+              </p>
+
               {typeof detectedCrop?.probability === "number" && (
                 <p>
-                  Confidence: {(detectedCrop.probability * 100).toFixed(2)}%
+                  Confidence:{" "}
+                  {(detectedCrop.probability * 100).toFixed(2)}%
                 </p>
               )}
             </div>
 
             <div>
-              <h3 className="font-semibold">Disease predictions</h3>
+              <h3 className="font-semibold">
+                Disease predictions
+              </h3>
+
               {diseases.length === 0 ? (
                 <p>No disease predictions were returned.</p>
               ) : (
                 <ol className="list-decimal space-y-3 pl-6">
                   {diseases.map((disease, index) => (
-                    <li key={disease.id ?? `${disease.name}-${index}`}>
-                      <p className="font-semibold">{disease.name}</p>
+                    <li
+                      key={disease.id ?? `${disease.name}-${index}`}
+                    >
+                      <p className="font-semibold">
+                        {disease.name}
+                      </p>
+
                       {typeof disease.probability === "number" && (
                         <p>
-                          Confidence: {(disease.probability * 100).toFixed(2)}%
+                          Confidence:{" "}
+                          {(disease.probability * 100).toFixed(2)}%
                         </p>
                       )}
                     </li>
@@ -172,5 +209,21 @@ export default function ReportPage() {
         </Link>
       </p>
     </main>
+  );
+}
+
+export default function ReportPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen p-6">
+          Loading report...
+        </main>
+      }
+    >
+      <ProtectedPage>
+        <ReportContent />
+      </ProtectedPage>
+    </Suspense>
   );
 }
