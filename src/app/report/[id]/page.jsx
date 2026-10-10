@@ -1,53 +1,59 @@
+
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 
+const STORAGE_KEY = "farmwise-current-report";
 
-export default function ReportPage({ params }) {
-  const resolvedParams = React.use(params);
-  const reportId = resolvedParams.id;
+function subscribeToReport(callback) {
+  window.addEventListener("storage", callback);
+  window.addEventListener("farmwise-report-updated", callback);
 
-  const [report, setReport] = useState(null);
-  const [error, setError] = useState("");
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener("farmwise-report-updated", callback);
+  };
+}
 
+function getReportSnapshot() {
+  try {
+    const saved = sessionStorage.getItem(STORAGE_KEY);
+    return saved ?? null;
+  } catch {
+    return null;
+  }
+}
 
-  useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem("farmwise-current-report");
+function getServerSnapshot() {
+  return null;
+}
 
-      if (!saved) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setError("No report found. Please submit the diagnosis form first.");
-        return;
-      }
+export default function ReportPage() {
+  const params = useParams();
+  const reportId = Array.isArray(params?.id)
+    ? params.id[0]
+    : params?.id;
 
-      const data = JSON.parse(saved);
+  const saved = useSyncExternalStore(
+    subscribeToReport,
+    getReportSnapshot,
+    getServerSnapshot
+  );
 
-      if (data.id !== reportId) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setError("This report could not be found.");
-        return;
-      }
+  if (saved === null) {
+    return <main className="min-h-screen p-6">Loading report...</main>;
+  }
 
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setReport(data);
-    } catch (err) {
-      console.error(err);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setError("Could not load the report.");
-    }
-  }, [reportId]);
+  let report;
 
-  if (error) {
+  try {
+    report = JSON.parse(saved);
+  } catch {
     return (
       <main className="min-h-screen p-6">
-        <h1 className="text-2xl font-bold">Diagnosis Report</h1>
-
-        <p role="alert" className="my-4">
-          {error}
-        </p>
-
+        <p role="alert">Could not load the report.</p>
         <Link href="/diagnose" className="underline">
           Start a new diagnosis
         </Link>
@@ -55,60 +61,102 @@ export default function ReportPage({ params }) {
     );
   }
 
-  if (!report) {
-    return <main className="p-6">Loading report...</main>;
+  if (!report || report.id !== reportId) {
+    return (
+      <main className="min-h-screen p-6">
+        <p role="alert">
+          No matching report found. Please submit the diagnosis form first.
+        </p>
+        <Link href="/diagnose" className="underline">
+          Start a new diagnosis
+        </Link>
+      </main>
+    );
   }
+
+  const diagnosis = report.diagnosis;
+  const diseases = diagnosis?.diseases ?? [];
+  const detectedCrop = diagnosis?.crop;
 
   return (
     <main className="min-h-screen p-6">
       <h1 className="mb-6 text-2xl font-bold">Diagnosis Report</h1>
 
-        {(report.image || report.imageData) && (
+      {(report.image || report.imageData) && (
         <img
-            src={report.image || report.imageData}
-            alt={`Uploaded ${report.cropName} crop`}
-            className="mb-6 max-h-80 max-w-full object-contain"
+          src={report.image || report.imageData}
+          alt={`Uploaded ${report.cropName} crop`}
+          className="mb-6 max-h-80 max-w-full object-contain"
         />
-        )}
+      )}
 
       <h2 className="text-xl font-semibold">Submitted Crop Details</h2>
 
       <dl className="my-4 space-y-3">
         <div>
-          <dt className="font-semibold">Crop</dt>
+          <dt className="font-semibold">Entered crop name</dt>
           <dd>{report.cropName}</dd>
         </div>
-
         <div>
           <dt className="font-semibold">Crop age</dt>
-          <dd>
-            {report.cropAge} {report.ageUnit}
-          </dd>
+          <dd>{report.cropAge} {report.ageUnit}</dd>
         </div>
-
         <div>
           <dt className="font-semibold">Location</dt>
           <dd>{report.location}</dd>
         </div>
-
         <div>
           <dt className="font-semibold">Soil type</dt>
           <dd>{report.soilType}</dd>
         </div>
-
         <div>
           <dt className="font-semibold">Treatment budget</dt>
-          <dd>₹{report.budget.toLocaleString("en-IN")}</dd>
+          <dd>₹{Number(report.budget).toLocaleString("en-IN")}</dd>
         </div>
       </dl>
 
-      <section className="my-6 border p-4">
-        <h2 className="font-semibold">Disease Diagnosis</h2>
+      <section className="my-6 space-y-4 border p-4">
+        <h2 className="text-xl font-semibold">Disease Diagnosis</h2>
 
-        <p>
-          Disease detection has not been connected yet. This page displays
-          the submitted crop information, not an actual diagnosis.
-        </p>
+        {!diagnosis ? (
+          <p>No diagnosis results are saved. Please submit the form again.</p>
+        ) : (
+          <>
+            <div>
+              <h3 className="font-semibold">AI-identified crop</h3>
+              <p>{detectedCrop?.name ?? "No crop identified"}</p>
+              {typeof detectedCrop?.probability === "number" && (
+                <p>
+                  Confidence: {(detectedCrop.probability * 100).toFixed(2)}%
+                </p>
+              )}
+            </div>
+
+            <div>
+              <h3 className="font-semibold">Disease predictions</h3>
+              {diseases.length === 0 ? (
+                <p>No disease predictions were returned.</p>
+              ) : (
+                <ol className="list-decimal space-y-3 pl-6">
+                  {diseases.map((disease, index) => (
+                    <li key={disease.id ?? `${disease.name}-${index}`}>
+                      <p className="font-semibold">{disease.name}</p>
+                      {typeof disease.probability === "number" && (
+                        <p>
+                          Confidence: {(disease.probability * 100).toFixed(2)}%
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+
+            <p className="text-sm text-gray-500">
+              Predictions are estimates and should be verified before treatment.
+            </p>
+          </>
+        )}
       </section>
 
       <Link

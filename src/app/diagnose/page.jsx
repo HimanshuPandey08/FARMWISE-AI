@@ -17,51 +17,6 @@ const INITIAL_FORM = {
   soilType: "",
 };
 
-function compressImage(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onerror = () => reject(new Error("Could not read image."));
-
-    reader.onload = () => {
-      const img = new Image();
-
-      img.onerror = () => reject(new Error("Invalid image."));
-
-      img.onload = () => {
-        const maxDimension = 1200;
-        const scale = Math.min(
-          1,
-          maxDimension / Math.max(img.width, img.height)
-        );
-
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-
-        const context = canvas.getContext("2d");
-
-        if (!context) {
-          reject(new Error("Image processing is unavailable."));
-          return;
-        }
-
-        context.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-        try {
-          resolve(canvas.toDataURL("image/jpeg", 0.75));
-        } catch {
-          reject(new Error("Could not compress the image."));
-        }
-      };
-
-      img.src = reader.result;
-    };
-
-    reader.readAsDataURL(file);
-  });
-}
-
 export default function DiagnosePage() {
   const router = useRouter();
 
@@ -71,7 +26,6 @@ export default function DiagnosePage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Release the previous preview URL when it changes or the page unmounts.
   useEffect(() => {
     return () => {
       if (preview) URL.revokeObjectURL(preview);
@@ -104,14 +58,74 @@ export default function DiagnosePage() {
       return;
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size === 0 || file.size > MAX_FILE_SIZE) {
       event.target.value = "";
-      setError("Image must be 10 MB or smaller.");
+      setError("Image must be larger than 0 bytes and no more than 10 MB.");
       return;
     }
 
     setImage(file);
     setPreview(URL.createObjectURL(file));
+  }
+
+  async function uploadCropImage(file) {
+    const formData = new FormData();
+    formData.append("image", file);
+
+    const response = await fetch("/api/upload-image", {
+      method: "POST",
+      body: formData,
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+
+    if (!contentType.includes("application/json")) {
+      throw new Error(
+        `Image upload returned a non-JSON response (HTTP ${response.status}).`
+      );
+    }
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Image upload failed.");
+    }
+
+    if (!result.secureUrl) {
+      throw new Error("Cloudinary did not return an image URL.");
+    }
+
+    return result.secureUrl;
+  }
+
+  async function diagnoseCrop(imageUrl) {
+    const response = await fetch("/api/diagnose-crop", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ imageUrl }),
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+
+    if (!contentType.includes("application/json")) {
+      throw new Error(
+        `Crop diagnosis returned a non-JSON response (HTTP ${response.status}).`
+      );
+    }
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Crop diagnosis failed.");
+    }
+
+    if (!result.success) {
+      throw new Error("Crop.health did not return a successful diagnosis.");
+    }
+
+    return result;
   }
 
   async function handleSubmit(event) {
@@ -159,8 +173,35 @@ export default function DiagnosePage() {
     setLoading(true);
 
     try {
-      const imageData = await compressImage(image);
 
+    const imageUrl = await uploadCropImage(image);
+    console.log("Cloudinary image URL:", imageUrl);
+
+    const diagnosis = await diagnoseCrop(imageUrl);
+
+    // Print the complete response.
+    console.log("Crop.health full diagnosis:", diagnosis);
+
+    // Print the detected crop.
+    console.log("Detected crop:", diagnosis.crop?.name ?? "Unknown");
+
+    // Print all disease predictions.
+    if (diagnosis.diseases?.length > 0) {
+    console.log("Disease predictions:");
+
+    diagnosis.diseases.forEach((disease, index) => {
+        console.log(`${index + 1}. ${disease.name}`);
+        console.log(
+        "Confidence:",
+        `${(disease.probability * 100).toFixed(2)}%`
+        );
+    });
+    } else {
+    console.log("No disease predictions returned.");
+    }
+
+
+      // Step 3: Save form data and diagnosis for the report page.
       const report = {
         id: "draft",
         cropName: form.cropName.trim(),
@@ -170,25 +211,35 @@ export default function DiagnosePage() {
         budget,
         soilType: form.soilType,
         imageName: image.name,
-        imageData,
+        image: imageUrl,
+        diagnosis,
         createdAt: new Date().toISOString(),
       };
 
-      sessionStorage.setItem(
+        sessionStorage.setItem(
         "farmwise-current-report",
         JSON.stringify(report)
-      );
+        );
 
-      router.push("/report/draft");
+        window.dispatchEvent(new Event("farmwise-report-updated"));
+
+        // Step 4: Navigate to the existing report page.
+        router.push("/report/draft");
+
+        
     } catch (err) {
-      console.error(err);
+      console.error("Diagnosis submission failed:", err);
+
       setError(
-        "Could not prepare the image. Please try another photograph."
+        err instanceof Error
+          ? err.message
+          : "Could not complete crop diagnosis. Please try again."
       );
     } finally {
       setLoading(false);
     }
   }
+
 
   function handleReset() {
     setForm(INITIAL_FORM);
@@ -213,6 +264,7 @@ export default function DiagnosePage() {
             accept="image/jpeg,image/png,image/webp"
             onChange={handleImageChange}
             className="block w-full border p-2"
+            required
           />
         </div>
 
@@ -317,13 +369,26 @@ export default function DiagnosePage() {
           </select>
         </div>
 
-        {error && <p role="alert">{error}</p>}
+        {error && (
+          <p role="alert" className="text-red-600">
+            {error}
+          </p>
+        )}
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Preparing report..." : "Submit crop details"}
+        <button
+          type="submit"
+          disabled={loading}
+          className="border px-4 py-2 disabled:opacity-50"
+        >
+          {loading ? "Uploading and diagnosing..." : "Diagnose crop"}
         </button>
 
-        <button type="button" onClick={handleReset}>
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={loading}
+          className="ml-2 border px-4 py-2 disabled:opacity-50"
+        >
           Reset form
         </button>
       </form>
