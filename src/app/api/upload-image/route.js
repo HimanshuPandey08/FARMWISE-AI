@@ -1,3 +1,5 @@
+import { auth } from "@/lib/auth";
+
 
 import { v2 as cloudinary } from "cloudinary";
 import { NextResponse } from "next/server";
@@ -17,9 +19,18 @@ const ALLOWED_TYPES = new Set([
 ]);
 
 export async function POST(request) {
-  console.log("UPLOAD ROUTE ENTERED");
 
   try {
+    const session = await auth.api.getSession({
+    headers: request.headers,
+  });
+
+  if (!session) {
+    return NextResponse.json(
+      { error: "Unauthorized. Please log in first." },
+      { status: 401 }
+    );
+}
     // 1. Verify Cloudinary credentials
     if (
       !process.env.CLOUDINARY_CLOUD_NAME ||

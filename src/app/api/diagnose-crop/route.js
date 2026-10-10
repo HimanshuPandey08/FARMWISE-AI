@@ -1,4 +1,4 @@
-
+import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 const CROP_HEALTH_URL =
@@ -8,6 +8,16 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 export async function POST(request) {
   try {
+    const session = await auth.api.getSession({
+    headers: request.headers,
+    });
+
+    if (!session) {
+    return NextResponse.json(
+        { error: "Unauthorized. Please log in first." },
+        { status: 401 }
+    );
+    }
     const apiKey = process.env.CROP_HEALTH_API_KEY;
 
     if (!apiKey) {
