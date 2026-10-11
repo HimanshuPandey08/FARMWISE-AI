@@ -54,7 +54,7 @@ if (typeof globalThis.DOMMatrix === "undefined") {
 }
 
 import * as cheerio from "cheerio";
-import { PDFParse } from "pdf-parse";
+
 import { selectAgriculturalSources } from "./agricultural-sources.js";
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
