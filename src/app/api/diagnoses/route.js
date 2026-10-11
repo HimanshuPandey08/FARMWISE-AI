@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 export async function POST(request) {
   try {
@@ -90,6 +91,37 @@ export async function GET(request) {
         { error: "Please log in first." },
         { status: 401 }
       );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (id) {
+      let query;
+      try {
+        query = { _id: new ObjectId(id), userId: session.user.id };
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid diagnosis ID format." },
+          { status: 400 }
+        );
+      }
+
+      const singleDiagnosis = await db.collection("diagnoses").findOne(query);
+
+      if (!singleDiagnosis) {
+        return NextResponse.json(
+          { error: "Diagnosis not found." },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({
+        diagnosis: {
+          ...singleDiagnosis,
+          _id: singleDiagnosis._id.toString(),
+        },
+      });
     }
 
     const diagnoses = await db
