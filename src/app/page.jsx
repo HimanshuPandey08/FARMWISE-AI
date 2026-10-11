@@ -111,6 +111,14 @@ function SiteHeader() {
             Home
           </Link>
 
+
+          <Link href="/register" className="transition hover:text-green-700">
+            Register
+          </Link>
+          
+          <Link href="/login" className="transition hover:text-green-700">
+            Login
+          </Link>
           {/* New History navigation link */}
           <Link
             href="/recent-history"
