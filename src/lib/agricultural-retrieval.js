@@ -1,4 +1,58 @@
 
+// Ensure DOMMatrix is present in Node.js server runtimes to prevent pdfjs-dist ReferenceError: DOMMatrix is not defined
+if (typeof globalThis.DOMMatrix === "undefined") {
+  class DOMMatrix {
+    constructor(init) {
+      if (Array.isArray(init) && init.length === 6) {
+        this.a = init[0]; this.b = init[1]; this.c = init[2];
+        this.d = init[3]; this.e = init[4]; this.f = init[5];
+      } else if (Array.isArray(init) && init.length === 16) {
+        this.a = init[0]; this.b = init[1]; this.c = init[4];
+        this.d = init[5]; this.e = init[12]; this.f = init[13];
+      } else {
+        this.a = 1; this.b = 0; this.c = 0; this.d = 1; this.e = 0; this.f = 0;
+      }
+      this.is2D = true;
+    }
+    translate(tx = 0, ty = 0) {
+      return this.multiply(new DOMMatrix([1, 0, 0, 1, tx, ty]));
+    }
+    scale(sx = 1, sy = sx) {
+      return this.multiply(new DOMMatrix([sx, 0, 0, sy, 0, 0]));
+    }
+    multiply(other) {
+      const a = this.a * other.a + this.c * other.b;
+      const b = this.b * other.a + this.d * other.b;
+      const c = this.a * other.c + this.c * other.d;
+      const d = this.b * other.c + this.d * other.d;
+      const e = this.a * other.e + this.c * other.f + this.e;
+      const f = this.b * other.e + this.d * other.f + this.f;
+      return new DOMMatrix([a, b, c, d, e, f]);
+    }
+    multiplySelf(other) {
+      return Object.assign(this, this.multiply(other));
+    }
+    preMultiplySelf(other) {
+      return Object.assign(this, other.multiply(this));
+    }
+    inverse() {
+      const det = this.a * this.d - this.b * this.c;
+      if (!det) return new DOMMatrix();
+      const a = this.d / det;
+      const b = -this.b / det;
+      const c = -this.c / det;
+      const d = this.a / det;
+      const e = (this.c * this.f - this.d * this.e) / det;
+      const f = (this.b * this.e - this.a * this.f) / det;
+      return new DOMMatrix([a, b, c, d, e, f]);
+    }
+    invertSelf() {
+      return Object.assign(this, this.inverse());
+    }
+  }
+  globalThis.DOMMatrix = DOMMatrix;
+}
+
 import * as cheerio from "cheerio";
 import { PDFParse } from "pdf-parse";
 import { selectAgriculturalSources } from "./agricultural-sources.js";

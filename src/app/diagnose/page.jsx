@@ -33,23 +33,22 @@ function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-4 text-xs font-medium text-gray-800 sm:gap-9 sm:text-sm">
+        <nav className="flex items-center gap-4 text-xs font-medium text-gray-800 sm:gap-7 sm:text-sm">
           <Link href="/" className="transition hover:text-green-700">
             Home
           </Link>
-            <Link
-            href="/#about"
-            className="transition hover:text-green-700"
-            >
+          <Link href="/recent-history" className="transition hover:text-green-700">
+            History
+          </Link>
+          <Link href="/community-intelligence" className="transition hover:text-green-700">
+            Community
+          </Link>
+          <Link href="/#about" className="transition hover:text-green-700">
             About
-            </Link>
-
-            <Link
-            href="/#contact"
-            className="transition hover:text-green-700"
-            >
+          </Link>
+          <Link href="/#contact" className="transition hover:text-green-700">
             Contact
-            </Link>
+          </Link>
         </nav>
       </div>
     </header>

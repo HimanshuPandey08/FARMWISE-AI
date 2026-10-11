@@ -1,6 +1,12 @@
 
 import dns from "node:dns";
 import { MongoClient } from "mongodb";
+import dotenv from "dotenv";
+
+if (!process.env.MONGODB_URI) {
+  dotenv.config({ path: ".env.local" });
+  dotenv.config();
+}
 
 const uri = process.env.MONGODB_URI;
 
