@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -26,6 +25,7 @@ function formatRelativeDate(dateValue) {
   if (days < 30) return `${days} days ago`;
 
   const months = Math.floor(days / 30);
+
   if (months < 12) {
     return `${months} ${months === 1 ? "month" : "months"} ago`;
   }
@@ -110,9 +110,19 @@ function SiteHeader() {
           <Link href="/" className="transition hover:text-green-700">
             Home
           </Link>
+
+          {/* New History navigation link */}
+          <Link
+            href="/recent-history"
+            className="transition hover:text-green-700"
+          >
+            History
+          </Link>
+
           <a href="#about" className="transition hover:text-green-700">
             About
           </a>
+
           <a href="#contact" className="transition hover:text-green-700">
             Contact
           </a>
@@ -161,6 +171,7 @@ function FeatureStrip() {
             >
               {feature.icon}
             </span>
+
             <div>
               <h2 className="text-sm font-bold text-gray-900">
                 {feature.title}
@@ -183,16 +194,20 @@ function RecentAnalysis({ diagnoses, loading, error, onRetry }) {
     <section id="recent-analysis" className="bg-[#f5fcfc]">
       <div className="mx-auto max-w-7xl px-5 py-7 sm:px-8 sm:py-9">
         <div className="mb-5 flex items-center justify-between gap-4">
-          <h2 className="text-sm font-semibold text-gray-900">
+          {/* The entire Recent Analysis heading is now clickable */}
+          <Link
+            href="/recent-history"
+            className="inline-flex items-center gap-2 rounded-sm text-sm font-semibold text-gray-900 transition hover:text-green-700 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2"
+          >
             Recent Analysis
-            <span className="ml-2 text-green-700" aria-hidden="true">
+            <span className="text-green-700" aria-hidden="true">
               →
             </span>
-          </h2>
+          </Link>
 
           {diagnoses.length > 3 && (
             <Link
-              href="/history"
+              href="/recent-history"
               className="text-xs font-semibold text-green-800 hover:underline"
             >
               View all
@@ -272,6 +287,7 @@ function RecentAnalysis({ diagnoses, loading, error, onRetry }) {
                     <h3 className="truncate text-sm font-bold text-gray-950">
                       {cropName}
                     </h3>
+
                     <p className="mt-1 text-xs text-gray-600">
                       {formatRelativeDate(record.createdAt)}
                     </p>
@@ -310,45 +326,13 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function loadDiagnoses(signal) {
-    setLoading(true);
-    setError("");
-
-    try {
-      const response = await fetch("/api/diagnoses", {
-        method: "GET",
-        credentials: "same-origin",
-        cache: "no-store",
-        signal,
-      });
-
-      if (response.status === 401) {
-        setDiagnoses([]);
-        setError("Log in to see your saved crop analyses.");
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error("Could not load your recent crop analyses.");
-      }
-
-      const data = await response.json();
-      setDiagnoses(Array.isArray(data?.diagnoses) ? data.diagnoses : []);
-    } catch (err) {
-      if (err.name !== "AbortError") {
-        setError(err.message || "Could not load your recent analyses.");
-      }
-    } finally {
-      if (!signal?.aborted) {
-        setLoading(false);
-      }
-    }
-  }
-
   useEffect(() => {
     const controller = new AbortController();
 
     async function fetchDiagnoses() {
+      setLoading(true);
+      setError("");
+
       try {
         const response = await fetch("/api/diagnoses", {
           method: "GET",
@@ -368,6 +352,7 @@ export default function HomePage() {
         }
 
         const data = await response.json();
+
         setDiagnoses(Array.isArray(data?.diagnoses) ? data.diagnoses : []);
       } catch (err) {
         if (err.name !== "AbortError") {
@@ -386,7 +371,35 @@ export default function HomePage() {
   }, []);
 
   function retryLoadDiagnoses() {
-    loadDiagnoses();
+    setLoading(true);
+    setError("");
+
+    fetch("/api/diagnoses", {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+    })
+      .then((response) => {
+        if (response.status === 401) {
+          setDiagnoses([]);
+          throw new Error("Log in to see your saved crop analyses.");
+        }
+
+        if (!response.ok) {
+          throw new Error("Could not load your recent crop analyses.");
+        }
+
+        return response.json();
+      })
+      .then((data) => {
+        setDiagnoses(Array.isArray(data?.diagnoses) ? data.diagnoses : []);
+      })
+      .catch((err) => {
+        setError(err.message || "Could not load your recent analyses.");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }
 
   return (
@@ -444,9 +457,7 @@ export default function HomePage() {
 
       <footer id="contact" className="border-t border-gray-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-5 py-5 text-center sm:flex-row sm:px-8 sm:text-left">
-          <p className="text-xs text-gray-500">
-            © {CURRENT_YEAR} FarmWise AI
-          </p>
+          <p className="text-xs text-gray-500">© {CURRENT_YEAR} FarmWise AI</p>
 
           <div className="flex items-center gap-4">
             <Link
