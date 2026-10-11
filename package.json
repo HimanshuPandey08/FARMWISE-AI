@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node test-agricultural-retrieval.mjs && node test-weather.mjs && node test-recommendations.mjs && node test-community-intelligence.mjs && node test-e2e-security-audit.mjs"
   },
   "dependencies": {
     "@better-auth/mongo-adapter": "^1.7.7",

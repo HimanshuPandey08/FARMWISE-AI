@@ -127,6 +127,13 @@ function SiteHeader() {
             History
           </Link>
 
+          <Link
+            href="/community-intelligence"
+            className="transition hover:text-green-700"
+          >
+            Community
+          </Link>
+
           <a href="#about" className="transition hover:text-green-700">
             About
           </a>
@@ -137,6 +144,35 @@ function SiteHeader() {
         </nav>
       </div>
     </header>
+  );
+}
+
+function CommunityBanner() {
+  return (
+    <section className="bg-gradient-to-r from-emerald-900 to-green-950 text-white border-y border-emerald-800">
+      <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-4 px-5 py-5 sm:flex-row sm:items-center sm:px-8">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-lime-400 text-2xl text-gray-950">
+            📡
+          </span>
+          <div>
+            <h2 className="text-base font-bold text-white sm:text-lg">
+              Community Disease Intelligence & Early Warnings
+            </h2>
+            <p className="text-xs text-lime-200/90 sm:text-sm">
+              Track emerging crop disease patterns and location-based advisories across farming communities.
+            </p>
+          </div>
+        </div>
+
+        <Link
+          href="/community-intelligence"
+          className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-lime-400 px-4 py-2.5 text-xs font-bold text-gray-950 shadow-sm transition hover:bg-lime-300"
+        >
+          View Live Intelligence <span aria-hidden="true">→</span>
+        </Link>
+      </div>
+    </section>
   );
 }
 
@@ -455,6 +491,7 @@ export default function HomePage() {
       </section>
 
       <FeatureStrip />
+      <CommunityBanner />
 
       <RecentAnalysis
         diagnoses={diagnoses}

@@ -117,6 +117,12 @@ function SiteHeader() {
           >
             History
           </Link>
+          <Link
+            href="/community-intelligence"
+            className="transition hover:text-green-700"
+          >
+            Community
+          </Link>
           <LogoutButton className="text-xs font-semibold text-gray-600 hover:text-red-700" />
         </nav>
       </div>
